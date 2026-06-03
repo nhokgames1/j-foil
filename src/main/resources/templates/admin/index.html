@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments/head :: head('Dashboard - J-Foil')}"></head>
+<body>
+    <div th:replace="~{admin/fragments/sidebar :: sidebar('dashboard')}"></div>
+    
+    <div class="main-content">
+        <h2 class="mb-4">Dashboard Overview</h2>
+        
+        <div class="row g-4 mb-5">
+            <div class="col-md-3">
+                <div class="glass-card">
+                    <div class="text-muted"><i class="fa-solid fa-download me-2"></i>Downloads Today</div>
+                    <div class="stat-value" th:text="${downloadsToday}">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="glass-card">
+                    <div class="text-muted"><i class="fa-solid fa-calendar-alt me-2"></i>Downloads Month</div>
+                    <div class="stat-value" th:text="${downloadsThisMonth}">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="glass-card">
+                    <div class="text-muted"><i class="fa-solid fa-network-wired me-2"></i>Bandwidth Today</div>
+                    <div class="stat-value" th:text="${bandwidthToday}">0 B</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="glass-card">
+                    <div class="text-muted"><i class="fa-solid fa-server me-2"></i>Bandwidth Month</div>
+                    <div class="stat-value" th:text="${bandwidthThisMonth}">0 B</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="glass-card">
+                    <h4 class="mb-4">Top Downloaded Games</h4>
+                    <table class="table table-striped table-borderless">
+                        <thead>
+                            <tr>
+                                <th>Game File</th>
+                                <th>Downloads</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="game : ${topGames}">
+                                <td th:text="${game.fileName}">game.nsp</td>
+                                <td><span class="badge bg-primary rounded-pill" th:text="${game.count}">0</span></td>
+                            </tr>
+                            <tr th:if="${#lists.isEmpty(topGames)}">
+                                <td colspan="2" class="text-center text-muted">No downloads yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="glass-card d-flex flex-column align-items-center justify-content-center" style="height: 100%;">
+                    <div class="stat-value" style="font-size: 4rem;" th:text="${activeUsersCount}">0</div>
+                    <div class="text-muted mt-2">Active Users</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

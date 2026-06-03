@@ -1,0 +1,16 @@
+<div th:fragment="sidebar(activePage)" class="sidebar">
+    <a href="/admin" class="brand"><i class="fa-solid fa-gamepad"></i> J-Foil</a>
+    <nav class="nav flex-column">
+        <a class="nav-link" th:classappend="${activePage == 'dashboard' ? 'active' : ''}" href="/admin">
+            <i class="fa-solid fa-chart-pie"></i> Dashboard
+        </a>
+        <a class="nav-link" th:classappend="${activePage == 'users' ? 'active' : ''}" href="/admin/users">
+            <i class="fa-solid fa-users"></i> Users & Subs
+        </a>
+    </nav>
+    <form th:action="@{/logout}" method="post" class="logout-form">
+        <button type="submit" class="btn nav-link w-100 text-start text-danger" style="background: none; border: none;">
+            <i class="fa-solid fa-sign-out-alt"></i> Logout
+        </button>
+    </form>
+</div>

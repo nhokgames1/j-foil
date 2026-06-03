@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: jfoil
+      POSTGRES_USER: jfoiluser
+      POSTGRES_PASSWORD: jfoilpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/jfoil
+      SPRING_DATASOURCE_USERNAME: jfoiluser
+      SPRING_DATASOURCE_PASSWORD: jfoilpassword
+      JFOIL_STORAGE_PATH: /data/games
+    volumes:
+      - ./games:/data/games
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
