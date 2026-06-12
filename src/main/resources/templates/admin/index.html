@@ -5,7 +5,14 @@
     <div th:replace="~{admin/fragments/sidebar :: sidebar('dashboard')}"></div>
     
     <div class="main-content">
-        <h2 class="mb-4">Dashboard Overview</h2>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="m-0">Dashboard Overview</h2>
+            <form th:action="@{/admin/files/refresh}" method="post">
+                <button type="submit" class="btn btn-gradient">
+                    <i class="fa-solid fa-arrows-rotate me-2"></i>Refresh Files Cache
+                </button>
+            </form>
+        </div>
         
         <div class="row g-4 mb-5">
             <div class="col-md-3">
@@ -57,10 +64,18 @@
                     </table>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="glass-card d-flex flex-column align-items-center justify-content-center" style="height: 100%;">
-                    <div class="stat-value" style="font-size: 4rem;" th:text="${activeUsersCount}">0</div>
+            <div class="col-md-4 d-flex flex-column gap-4 justify-content-between">
+                <div class="glass-card d-flex flex-column align-items-center justify-content-center flex-grow-1 py-4">
+                    <div class="stat-value" style="font-size: 2.5rem;" th:text="${activeUsersCount}">0</div>
                     <div class="text-muted mt-2">Active Users</div>
+                </div>
+                <div class="glass-card d-flex flex-column align-items-center justify-content-center flex-grow-1 py-4">
+                    <div class="stat-value" style="font-size: 2.5rem;" th:text="${totalFiles}">0</div>
+                    <div class="text-muted mt-2">Total Files</div>
+                </div>
+                <div class="glass-card d-flex flex-column align-items-center justify-content-center flex-grow-1 py-4">
+                    <div class="stat-value" style="font-size: 2.5rem;" th:text="${totalSize}">0 B</div>
+                    <div class="text-muted mt-2">Total Storage Size</div>
                 </div>
             </div>
         </div>

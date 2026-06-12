@@ -4,6 +4,7 @@ import com.jfoil.model.Subscription;
 import com.jfoil.model.User;
 import com.jfoil.repository.SubscriptionRepository;
 import com.jfoil.repository.UserRepository;
+import com.jfoil.service.FileService;
 import com.jfoil.service.StatisticsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
@@ -20,13 +21,16 @@ public class AdminController {
     private final SubscriptionRepository subscriptionRepository;
     private final StatisticsService statisticsService;
     private final PasswordEncoder passwordEncoder;
+    private final FileService fileService;
 
     public AdminController(UserRepository userRepository, SubscriptionRepository subscriptionRepository,
-                           StatisticsService statisticsService, PasswordEncoder passwordEncoder) {
+                           StatisticsService statisticsService, PasswordEncoder passwordEncoder,
+                           FileService fileService) {
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.statisticsService = statisticsService;
         this.passwordEncoder = passwordEncoder;
+        this.fileService = fileService;
     }
 
     @GetMapping
@@ -37,7 +41,15 @@ public class AdminController {
         model.addAttribute("bandwidthThisMonth", statisticsService.getBandwidthThisMonthFormatted());
         model.addAttribute("topGames", statisticsService.getTopGames());
         model.addAttribute("activeUsersCount", subscriptionRepository.count());
+        model.addAttribute("totalFiles", fileService.getFileCount());
+        model.addAttribute("totalSize", fileService.getTotalFileSizeFormatted());
         return "admin/index";
+    }
+
+    @PostMapping("/files/refresh")
+    public String refreshFiles() {
+        fileService.scanStorageDirectory();
+        return "redirect:/admin";
     }
 
     @GetMapping("/users")

@@ -20,7 +20,7 @@ spring:
 
 jfoil:
   storage:
-    path: ${JFOIL_STORAGE_PATH:./games}
+    path: '${JFOIL_STORAGE_PATH:C:\ScanFolder}'
 
 server:
   port: 8080

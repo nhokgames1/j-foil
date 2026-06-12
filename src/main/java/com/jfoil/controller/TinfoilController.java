@@ -20,11 +20,14 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/tinfoil")
 public class TinfoilController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TinfoilController.class);
 
     private final FileService fileService;
     private final UserRepository userRepository;
@@ -39,7 +42,7 @@ public class TinfoilController {
         this.downloadLogRepository = downloadLogRepository;
     }
 
-    @GetMapping("/index.json")
+    @GetMapping({"", "/", "/index.json"})
     public Map<String, Object> getIndex(Authentication authentication) {
         User user = userRepository.findByUsername(authentication.getName()).orElseThrow();
         Subscription sub = subscriptionRepository.findById(user.getId()).orElse(null);
@@ -53,17 +56,20 @@ public class TinfoilController {
             return response;
         }
 
-        response.put("files", fileService.getFileTree());
+        List<com.jfoil.service.FileService.FileInfo> files = fileService.getFileTree().stream()
+                .map(file -> new com.jfoil.service.FileService.FileInfo("files/" + file.getUrl(), file.getSize()))
+                .toList();
+        response.put("files", files);
         response.put("success", "Welcome " + user.getUsername() + "! Your subscription is valid until " + sub.getExpiryDate().toLocalDate() + ".");
 
         return response;
     }
 
-    @GetMapping("/files/{*filename}")
-    public ResponseEntity<ResourceRegion> downloadFile(@RequestHeader HttpHeaders headers,
-                                                       @PathVariable String filename,
-                                                       HttpServletRequest request,
-                                                       Authentication authentication) throws IOException {
+    @RequestMapping(value = "/files/{*filename}", method = {RequestMethod.GET, RequestMethod.HEAD})
+    public ResponseEntity<?> downloadFile(@RequestHeader HttpHeaders headers,
+                                          @PathVariable String filename,
+                                          HttpServletRequest request,
+                                          Authentication authentication) throws IOException {
         
         // Remove leading slash from filename
         if (filename.startsWith("/")) {
@@ -77,40 +83,45 @@ public class TinfoilController {
         }
 
         Path filePath = fileService.getFilePath(filename);
+        log.info("Download requested for file: '{}' (user: '{}', ip: '{}'). Resolving to path: '{}'", 
+                filename, user.getUsername(), request.getRemoteAddr(), filePath.toAbsolutePath());
         Resource resource = new UrlResource(filePath.toUri());
 
         if (!resource.exists() || !resource.isReadable()) {
+            log.warn("File not found or not readable: '{}' -> Resolved path: '{}'", filename, filePath.toAbsolutePath());
             return ResponseEntity.notFound().build();
         }
 
         long contentLength = resource.contentLength();
-        ResourceRegion region = resourceRegion(resource, headers);
 
-        // Log download start only
-        DownloadLog log = new DownloadLog();
-        log.setUser(user);
-        log.setFileName(filename);
-        log.setFileSize(contentLength);
-        log.setIpAddress(request.getRemoteAddr());
-        downloadLogRepository.save(log);
+        // Log download start only for GET requests
+        if ("GET".equalsIgnoreCase(request.getMethod())) {
+            DownloadLog log = new DownloadLog();
+            log.setUser(user);
+            log.setFileName(filename);
+            log.setFileSize(contentLength);
+            log.setIpAddress(request.getRemoteAddr());
+            downloadLogRepository.save(log);
+        }
 
-        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(region);
-    }
-
-    private ResourceRegion resourceRegion(Resource resource, HttpHeaders headers) throws IOException {
-        long contentLength = resource.contentLength();
-        HttpRange range = headers.getRange().isEmpty() ? null : headers.getRange().get(0);
-
-        if (range != null) {
+        List<HttpRange> ranges = headers.getRange();
+        if (ranges == null || ranges.isEmpty()) {
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .contentLength(contentLength)
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(resource);
+        } else {
+            HttpRange range = ranges.get(0);
             long start = range.getRangeStart(contentLength);
             long end = range.getRangeEnd(contentLength);
-            long rangeLength = Math.min(1024 * 1024, end - start + 1); // 1MB chunks to avoid memory issues
-            return new ResourceRegion(resource, start, rangeLength);
-        } else {
-            long rangeLength = Math.min(1024 * 1024, contentLength);
-            return new ResourceRegion(resource, 0, rangeLength);
+            long rangeLength = end - start + 1;
+            ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
+            
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(region);
         }
     }
 }

@@ -23,25 +23,35 @@ public class JFoilApplication {
     @Bean
     public CommandLineRunner initData(UserRepository userRepository, 
                                       SubscriptionRepository subscriptionRepository, 
-                                      PasswordEncoder passwordEncoder) {
+                                      PasswordEncoder passwordEncoder,
+                                      org.springframework.transaction.support.TransactionTemplate transactionTemplate) {
         return args -> {
-            if (userRepository.findByUsername("admin").isEmpty()) {
-                User admin = new User();
-                admin.setUsername("admin");
-                admin.setPassword(passwordEncoder.encode("admin123"));
-                admin.setRole("ADMIN");
-                userRepository.save(admin);
+            transactionTemplate.execute(status -> {
+                User admin;
+                if (userRepository.findByUsername("admin").isEmpty()) {
+                    admin = new User();
+                    admin.setUsername("admin");
+                    admin.setPassword(passwordEncoder.encode("admin123"));
+                    admin.setRole("ADMIN");
+                    admin = userRepository.save(admin);
+                } else {
+                    admin = userRepository.findByUsername("admin").orElseThrow();
+                }
 
-                Subscription sub = new Subscription();
-                sub.setUser(admin);
+                Subscription sub = subscriptionRepository.findById(admin.getId()).orElse(null);
+                if (sub == null) {
+                    sub = new Subscription();
+                    sub.setUser(admin);
+                }
                 sub.setExpiryDate(LocalDateTime.now().plusYears(100)); // Effectively never expires
                 sub.setActive(true);
                 subscriptionRepository.save(sub);
                 
                 System.out.println("=========================================================");
-                System.out.println("Default admin user created! Username: admin | Password: admin123");
+                System.out.println("Default admin user ensured active! Username: admin | Password: admin123");
                 System.out.println("=========================================================");
-            }
+                return null;
+            });
         };
     }
 }
