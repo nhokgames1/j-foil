@@ -10,7 +10,6 @@ import com.jfoil.service.FileService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -66,10 +65,9 @@ public class TinfoilController {
     }
 
     @RequestMapping(value = "/files/{*filename}", method = {RequestMethod.GET, RequestMethod.HEAD})
-    public ResponseEntity<?> downloadFile(@RequestHeader HttpHeaders headers,
-                                          @PathVariable String filename,
-                                          HttpServletRequest request,
-                                          Authentication authentication) throws IOException {
+    public ResponseEntity<Resource> downloadFile(@PathVariable String filename,
+                                                 HttpServletRequest request,
+                                                 Authentication authentication) throws IOException {
         
         // Remove leading slash from filename
         if (filename.startsWith("/")) {
@@ -104,24 +102,10 @@ public class TinfoilController {
             downloadLogRepository.save(log);
         }
 
-        List<HttpRange> ranges = headers.getRange();
-        if (ranges == null || ranges.isEmpty()) {
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .contentLength(contentLength)
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .body(resource);
-        } else {
-            HttpRange range = ranges.get(0);
-            long start = range.getRangeStart(contentLength);
-            long end = range.getRangeEnd(contentLength);
-            long rangeLength = end - start + 1;
-            ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
-            
-            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .body(region);
-        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .contentLength(contentLength)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
     }
 }
