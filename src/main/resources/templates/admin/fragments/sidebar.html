@@ -4,6 +4,9 @@
         <a class="nav-link" th:classappend="${activePage == 'dashboard' ? 'active' : ''}" href="/admin">
             <i class="fa-solid fa-chart-pie"></i> Dashboard
         </a>
+        <a class="nav-link" th:classappend="${activePage == 'games' ? 'active' : ''}" href="/admin/games">
+            <i class="fa-solid fa-gamepad"></i> Games List
+        </a>
         <a class="nav-link" th:classappend="${activePage == 'users' ? 'active' : ''}" href="/admin/users">
             <i class="fa-solid fa-users"></i> Users & Subs
         </a>

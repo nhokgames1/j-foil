@@ -52,6 +52,12 @@ public class AdminController {
         return "redirect:/admin";
     }
 
+    @GetMapping("/games")
+    public String games(Model model) {
+        model.addAttribute("files", fileService.getFileTree());
+        return "admin/games";
+    }
+
     @GetMapping("/users")
     public String users(Model model) {
         model.addAttribute("users", userRepository.findAll());
@@ -60,7 +66,11 @@ public class AdminController {
     }
 
     @PostMapping("/users/add")
-    public String addUser(@RequestParam String username, @RequestParam String password, @RequestParam String role) {
+    public String addUser(@RequestParam String username, 
+                          @RequestParam String password, 
+                          @RequestParam String role,
+                          @RequestParam String duration,
+                          @RequestParam(required = false) String manualExpiry) {
         User user = new User();
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(password));
@@ -69,7 +79,24 @@ public class AdminController {
 
         Subscription sub = new Subscription();
         sub.setUser(user);
-        sub.setExpiryDate(LocalDateTime.now().plusMonths(1));
+        
+        LocalDateTime expiryDate;
+        if ("manual".equals(duration) && manualExpiry != null && !manualExpiry.isBlank()) {
+            try {
+                expiryDate = java.time.LocalDate.parse(manualExpiry).atTime(23, 59, 59);
+            } catch (Exception e) {
+                expiryDate = LocalDateTime.now().plusMonths(1); // default fallback
+            }
+        } else {
+            try {
+                int months = Integer.parseInt(duration);
+                expiryDate = LocalDateTime.now().plusMonths(months);
+            } catch (Exception e) {
+                expiryDate = LocalDateTime.now().plusMonths(1); // default fallback
+            }
+        }
+        
+        sub.setExpiryDate(expiryDate);
         sub.setActive(true);
         subscriptionRepository.save(sub);
 
@@ -93,13 +120,30 @@ public class AdminController {
     }
 
     @PostMapping("/users/extend-sub")
-    public String extendSub(@RequestParam Long id) {
+    public String extendSub(@RequestParam Long id,
+                            @RequestParam String duration,
+                            @RequestParam(required = false) String manualExpiry) {
         Subscription sub = subscriptionRepository.findById(id).orElseThrow();
-        if (sub.getExpiryDate().isBefore(LocalDateTime.now())) {
-            sub.setExpiryDate(LocalDateTime.now().plusMonths(1));
+        
+        LocalDateTime newExpiry;
+        if ("manual".equals(duration) && manualExpiry != null && !manualExpiry.isBlank()) {
+            try {
+                newExpiry = java.time.LocalDate.parse(manualExpiry).atTime(23, 59, 59);
+            } catch (Exception e) {
+                newExpiry = LocalDateTime.now().plusMonths(1); // default fallback
+            }
         } else {
-            sub.setExpiryDate(sub.getExpiryDate().plusMonths(1));
+            try {
+                int months = Integer.parseInt(duration);
+                // If current subscription is already expired, extend from now. Otherwise, extend from current expiry date.
+                LocalDateTime baseDate = sub.getExpiryDate().isBefore(LocalDateTime.now()) ? LocalDateTime.now() : sub.getExpiryDate();
+                newExpiry = baseDate.plusMonths(months);
+            } catch (Exception e) {
+                newExpiry = LocalDateTime.now().plusMonths(1); // default fallback
+            }
         }
+        
+        sub.setExpiryDate(newExpiry);
         sub.setActive(true);
         subscriptionRepository.save(sub);
         return "redirect:/admin/users";
