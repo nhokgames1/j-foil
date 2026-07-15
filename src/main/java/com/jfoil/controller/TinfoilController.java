@@ -51,7 +51,7 @@ public class TinfoilController {
 
         if (sub == null || !sub.isActive() || sub.getExpiryDate().isBefore(LocalDateTime.now())) {
             response.put("files", new ArrayList<>());
-            response.put("success", "Subscription Expired or Inactive. Please renew to access files.");
+            response.put("success", "Gói đăng ký đã hết hạn hoặc chưa kích hoạt. Vui lòng liên hệ facebook.com/vieetvungve để gia hạn.");
             return response;
         }
 
@@ -59,7 +59,7 @@ public class TinfoilController {
                 .map(file -> new com.jfoil.service.FileService.FileInfo("files/" + file.getUrl(), file.getSize()))
                 .toList();
         response.put("files", files);
-        response.put("success", "Welcome " + user.getUsername() + "! Your subscription is valid until " + sub.getExpiryDate().toLocalDate() + ".");
+        response.put("success", "Chào mừng " + user.getUsername() + "! Gói đăng ký của bạn có hiệu lực đến ngày " + sub.getExpiryDate().toLocalDate() + ".");
 
         return response;
     }
