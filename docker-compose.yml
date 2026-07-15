@@ -16,7 +16,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/jfoil
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/jfoil
       SPRING_DATASOURCE_USERNAME: jfoiluser
       SPRING_DATASOURCE_PASSWORD: jfoilpassword
       JFOIL_STORAGE_PATH: /data/games
