@@ -25,10 +25,59 @@ public class FileService {
     private String storagePath;
 
     private final ConcurrentHashMap<String, Long> cachedFileTree = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> virtualToPhysicalMap = new ConcurrentHashMap<>();
     private WatchService watchService;
     private final Map<WatchKey, Path> watchKeys = new ConcurrentHashMap<>();
     private Thread watcherThread;
     private volatile boolean running = true;
+
+    private static String sanitizeFilename(String filename) {
+        if (filename == null) return null;
+        // Remove double closing brackets
+        filename = filename.replaceAll("\\]+", "]");
+        
+        // Ensure matching brackets
+        StringBuilder sb = new StringBuilder();
+        boolean inBrackets = false;
+        for (int i = 0; i < filename.length(); i++) {
+            char c = filename.charAt(i);
+            if (c == '[') {
+                if (inBrackets) {
+                    sb.append(']'); // close previous before opening new
+                }
+                sb.append('[');
+                inBrackets = true;
+            } else if (c == ']') {
+                if (inBrackets) {
+                    sb.append(']');
+                    inBrackets = false;
+                }
+            } else {
+                sb.append(c);
+            }
+        }
+        if (inBrackets) {
+            int extIdx = sb.lastIndexOf(".");
+            if (extIdx != -1) {
+                sb.insert(extIdx, ']');
+            } else {
+                sb.append(']');
+            }
+        }
+        
+        String result = sb.toString();
+        result = result.replace("+", " ");
+        result = result.replaceAll("\\s+", " ");
+        return result;
+    }
+
+    private static String sanitizePath(String path) {
+        if (path == null) return null;
+        String[] parts = path.split("/");
+        if (parts.length == 0) return path;
+        parts[parts.length - 1] = sanitizeFilename(parts[parts.length - 1]);
+        return String.join("/", parts);
+    }
 
     @PostConstruct
     public void init() {
@@ -71,22 +120,31 @@ public class FileService {
         }
 
         ConcurrentHashMap<String, Long> newTree = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, String> newVirtualMap = new ConcurrentHashMap<>();
         try (Stream<Path> paths = Files.walk(rootPath)) {
             java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger(0);
             paths.filter(Files::isRegularFile)
                  .forEach(path -> {
-                     String relativePath = rootPath.relativize(path).toString().replace("\\", "/");
-                     long size = path.toFile().length();
-                     newTree.put(relativePath, size);
-                     int currentCount = count.incrementAndGet();
-                     if (currentCount % 100 == 0) {
-                         log.info("Scan progress: {} files mapped so far...", currentCount);
-                     }
+                      String relativePath = rootPath.relativize(path).toString().replace("\\", "/");
+                      long size = path.toFile().length();
+                      newTree.put(relativePath, size);
+                      
+                      String virtualPath = sanitizePath(relativePath);
+                      newVirtualMap.put(virtualPath, relativePath);
+                      
+                      int currentCount = count.incrementAndGet();
+                      if (currentCount % 100 == 0) {
+                          log.info("Scan progress: {} files mapped so far...", currentCount);
+                      }
                  });
             
             // Atomic swap to prevent incomplete states during requests
             cachedFileTree.clear();
             cachedFileTree.putAll(newTree);
+            
+            virtualToPhysicalMap.clear();
+            virtualToPhysicalMap.putAll(newVirtualMap);
+            
             log.info("Scan completed. Found {} files.", cachedFileTree.size());
         } catch (IOException e) {
             log.error("Failed to scan storage directory", e);
@@ -94,8 +152,8 @@ public class FileService {
     }
 
     public List<FileInfo> getFileTree() {
-        return cachedFileTree.entrySet().stream()
-                .map(entry -> new FileInfo(entry.getKey(), entry.getValue()))
+        return virtualToPhysicalMap.entrySet().stream()
+                .map(entry -> new FileInfo(entry.getKey(), cachedFileTree.getOrDefault(entry.getValue(), 0L)))
                 .collect(Collectors.toList());
     }
 
@@ -117,7 +175,8 @@ public class FileService {
     }
 
     public Path getFilePath(String filename) {
-        return Paths.get(storagePath, filename);
+        String physicalFilename = virtualToPhysicalMap.getOrDefault(filename, filename);
+        return Paths.get(storagePath, physicalFilename);
     }
 
     private void startDirectoryWatcher(Path rootPath) {
@@ -172,6 +231,7 @@ public class FileService {
                                         scanStorageDirectory();
                                     } else {
                                         cachedFileTree.put(relativePath, Files.size(child));
+                                        virtualToPhysicalMap.put(sanitizePath(relativePath), relativePath);
                                         log.info("File created, added to cache: {}", relativePath);
                                     }
                                 } catch (IOException e) {
@@ -183,6 +243,7 @@ public class FileService {
                                 try {
                                     if (!Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                                         cachedFileTree.put(relativePath, Files.size(child));
+                                        virtualToPhysicalMap.put(sanitizePath(relativePath), relativePath);
                                         log.info("File modified, updated cache: {}", relativePath);
                                     }
                                 } catch (IOException e) {
@@ -192,6 +253,7 @@ public class FileService {
                                 boolean removed = false;
                                 if (cachedFileTree.containsKey(relativePath)) {
                                     cachedFileTree.remove(relativePath);
+                                    virtualToPhysicalMap.remove(sanitizePath(relativePath));
                                     removed = true;
                                 }
                                 
