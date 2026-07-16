@@ -97,6 +97,20 @@ public class TinfoilControllerTest {
 
     @Test
     @WithMockUser(username = "testuser", roles = {"USER"})
+    public void testDownloadUrlEncodedFilename() throws Exception {
+        Mockito.when(fileService.getFilePath("test game.nsp")).thenReturn(tempFilePath);
+
+        MvcResult result = mockMvc.perform(get(new java.net.URI("/tinfoil/files/test%20game.nsp")))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+                .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "100"))
+                .andReturn();
+
+        assertArrayEquals(testFileContent, result.getResponse().getContentAsByteArray());
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
     public void testDownloadRangeMiddle() throws Exception {
         Mockito.when(fileService.getFilePath("testgame.nsp")).thenReturn(tempFilePath);
 
@@ -142,5 +156,16 @@ public class TinfoilControllerTest {
                 .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
                 .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes 10-20/100"))
                 .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "11"));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    public void testDownloadRangeMultiple() throws Exception {
+        Mockito.when(fileService.getFilePath("testgame.nsp")).thenReturn(tempFilePath);
+
+        mockMvc.perform(get("/tinfoil/files/testgame.nsp")
+                        .header(HttpHeaders.RANGE, "bytes=10-20,40-50"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, org.hamcrest.Matchers.startsWith("multipart/byteranges")));
     }
 }

@@ -41,6 +41,14 @@ public class TinfoilController {
         this.downloadLogRepository = downloadLogRepository;
     }
 
+    private String encodePath(String path) {
+        try {
+            return org.springframework.web.util.UriUtils.encodePath(path, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return path;
+        }
+    }
+
     @GetMapping({"", "/", "/index.json"})
     public Map<String, Object> getIndex(Authentication authentication) {
         User user = userRepository.findByUsername(authentication.getName()).orElseThrow();
@@ -56,7 +64,7 @@ public class TinfoilController {
         }
 
         List<com.jfoil.service.FileService.FileInfo> files = fileService.getFileTree().stream()
-                .map(file -> new com.jfoil.service.FileService.FileInfo("files/" + file.getUrl(), file.getSize()))
+                .map(file -> new com.jfoil.service.FileService.FileInfo("files/" + encodePath(file.getUrl()), file.getSize()))
                 .toList();
         response.put("files", files);
         response.put("success", "Chao mung " + user.getUsername() + "! Goi dang ky cua ban co hieu luc den ngay " + sub.getExpiryDate().toLocalDate() + ".");
@@ -72,6 +80,13 @@ public class TinfoilController {
         // Remove leading slash from filename
         if (filename.startsWith("/")) {
             filename = filename.substring(1);
+        }
+
+        // URL decode filename to support both encoded and decoded path requests
+        try {
+            filename = org.springframework.web.util.UriUtils.decode(filename, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            // fallback to original path if decoding fails
         }
 
         User user = userRepository.findByUsername(authentication.getName()).orElseThrow();
