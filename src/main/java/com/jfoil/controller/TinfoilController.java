@@ -9,7 +9,7 @@ import com.jfoil.repository.UserRepository;
 import com.jfoil.service.FileService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -51,7 +51,7 @@ public class TinfoilController {
 
         if (sub == null || !sub.isActive() || sub.getExpiryDate().isBefore(LocalDateTime.now())) {
             response.put("files", new ArrayList<>());
-            response.put("success", "Gói đăng ký đã hết hạn hoặc chưa kích hoạt. Vui lòng liên hệ facebook.com/vieetvungve để gia hạn.");
+            response.put("success", "Goi dang ky da het han hoac chua kich hoat. Vui long lien he facebook.com/vieetvungve hoac Zalo 0357394235 de gia han.");
             return response;
         }
 
@@ -59,7 +59,7 @@ public class TinfoilController {
                 .map(file -> new com.jfoil.service.FileService.FileInfo("files/" + file.getUrl(), file.getSize()))
                 .toList();
         response.put("files", files);
-        response.put("success", "Chào mừng " + user.getUsername() + "! Gói đăng ký của bạn có hiệu lực đến ngày " + sub.getExpiryDate().toLocalDate() + ".");
+        response.put("success", "Chao mung " + user.getUsername() + "! Goi dang ky cua ban co hieu luc den ngay " + sub.getExpiryDate().toLocalDate() + ".");
 
         return response;
     }
@@ -83,7 +83,7 @@ public class TinfoilController {
         Path filePath = fileService.getFilePath(filename);
         log.info("Download requested for file: '{}' (user: '{}', ip: '{}'). Resolving to path: '{}'", 
                 filename, user.getUsername(), request.getRemoteAddr(), filePath.toAbsolutePath());
-        Resource resource = new UrlResource(filePath.toUri());
+        Resource resource = new FileSystemResource(filePath);
 
         if (!resource.exists() || !resource.isReadable()) {
             log.warn("File not found or not readable: '{}' -> Resolved path: '{}'", filename, filePath.toAbsolutePath());
@@ -92,14 +92,17 @@ public class TinfoilController {
 
         long contentLength = resource.contentLength();
 
-        // Log download start only for GET requests
+        // Log download start only for GET requests and only for full file or the first block/chunk of parallel range downloads
         if ("GET".equalsIgnoreCase(request.getMethod())) {
-            DownloadLog log = new DownloadLog();
-            log.setUser(user);
-            log.setFileName(filename);
-            log.setFileSize(contentLength);
-            log.setIpAddress(request.getRemoteAddr());
-            downloadLogRepository.save(log);
+            String rangeHeader = request.getHeader(HttpHeaders.RANGE);
+            if (rangeHeader == null || rangeHeader.isBlank() || rangeHeader.startsWith("bytes=0-") || rangeHeader.startsWith("bytes=0/")) {
+                DownloadLog logEntry = new DownloadLog();
+                logEntry.setUser(user);
+                logEntry.setFileName(filename);
+                logEntry.setFileSize(contentLength);
+                logEntry.setIpAddress(request.getRemoteAddr());
+                downloadLogRepository.save(logEntry);
+            }
         }
 
         return ResponseEntity.ok()

@@ -130,4 +130,17 @@ public class TinfoilControllerTest {
         System.arraycopy(testFileContent, 90, expected, 0, 10);
         assertArrayEquals(expected, result.getResponse().getContentAsByteArray());
     }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    public void testHeadRangeRequest() throws Exception {
+        Mockito.when(fileService.getFilePath("testgame.nsp")).thenReturn(tempFilePath);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head("/tinfoil/files/testgame.nsp")
+                        .header(HttpHeaders.RANGE, "bytes=10-20"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes 10-20/100"))
+                .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "11"));
+    }
 }
