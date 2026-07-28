@@ -17,21 +17,24 @@
         <div class="glass-card mb-4">
             <div class="row align-items-center">
                 <div class="col-md-8">
-                    <div class="input-group">
-                        <span class="input-group-text" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-right: none; color: var(--text-muted);">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                        </span>
-                        <input type="text" id="searchGames" class="form-control" placeholder="Search games by filename..." onkeyup="filterGames(this.value)" style="border-left: none;">
-                    </div>
+                    <form th:action="@{/admin/games}" method="get" class="m-0">
+                        <div class="input-group">
+                            <span class="input-group-text" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-right: none; color: var(--text-muted);">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </span>
+                            <input type="text" name="search" th:value="${search}" class="form-control" placeholder="Search games by filename..." style="border-left: none;">
+                            <button class="btn btn-gradient" type="submit" style="border-radius: 0 8px 8px 0;">Search</button>
+                        </div>
+                    </form>
                 </div>
                 <div class="col-md-4 text-md-end mt-3 mt-md-0">
-                    <span class="text-muted" id="gamesCountText">Showing all <span th:text="${#lists.size(files)}">0</span> games</span>
+                    <span class="text-muted" id="gamesCountText">Showing <span th:text="${#lists.size(files)}">0</span> of <span th:text="${totalFiles}">0</span> games</span>
                 </div>
             </div>
         </div>
 
         <div class="glass-card">
-            <table class="table table-striped table-borderless">
+            <table class="table table-striped table-borderless mb-0">
                 <thead>
                     <tr>
                         <th>Game File</th>
@@ -45,14 +48,35 @@
                         <td class="text-muted" th:text="${file.url}">files/game.nsp</td>
                         <td class="file-size" th:data-size="${file.size}">0 B</td>
                     </tr>
-                    <tr id="noGamesRow" style="display: none;">
-                        <td colspan="3" class="text-center text-muted py-4">No matching games found.</td>
-                    </tr>
                     <tr th:if="${#lists.isEmpty(files)}">
-                        <td colspan="3" class="text-center text-muted py-4">No games found in the storage path. Click "Scan Folder" to refresh.</td>
+                        <td colspan="3" class="text-center text-muted py-4">No games found.</td>
                     </tr>
                 </tbody>
             </table>
+            
+            <div th:if="${totalPages > 1}" class="d-flex justify-content-center mt-4 mb-2">
+                <nav aria-label="Page navigation">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item" th:classappend="${currentPage == 1} ? 'disabled'">
+                            <a class="page-link" th:href="@{/admin/games(page=${currentPage - 1}, search=${search})}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        
+                        <th:block th:each="i : ${#numbers.sequence(1, totalPages)}">
+                            <li th:if="${i >= currentPage - 2 and i <= currentPage + 2}" class="page-item" th:classappend="${i == currentPage} ? 'active'">
+                                <a class="page-link" th:href="@{/admin/games(page=${i}, search=${search})}" th:text="${i}">1</a>
+                            </li>
+                        </th:block>
+                        
+                        <li class="page-item" th:classappend="${currentPage == totalPages} ? 'disabled'">
+                            <a class="page-link" th:href="@{/admin/games(page=${currentPage + 1}, search=${search})}" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
         </div>
     </div>
 
@@ -76,38 +100,6 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
-        function filterGames(query) {
-            const filter = query.toLowerCase().trim();
-            const rows = document.querySelectorAll("#gamesTableBody tr:not(#noGamesRow)");
-            const noGamesRow = document.getElementById("noGamesRow");
-            let visibleCount = 0;
-
-            rows.forEach(row => {
-                const gameName = row.querySelector(".game-name").textContent.toLowerCase();
-                const gamePath = row.querySelector("td:nth-child(2)").textContent.toLowerCase();
-                if (gameName.includes(filter) || gamePath.includes(filter)) {
-                    row.style.display = "";
-                    visibleCount++;
-                } else {
-                    row.style.display = "none";
-                }
-            });
-
-            // Handle empty result state
-            if (visibleCount === 0 && rows.length > 0) {
-                noGamesRow.style.display = "";
-            } else {
-                noGamesRow.style.display = "none";
-            }
-
-            // Update count text
-            const countText = document.getElementById("gamesCountText");
-            if (filter === "") {
-                countText.innerHTML = "Showing all " + rows.length + " games";
-            } else {
-                countText.innerHTML = "Found " + visibleCount + " matching games";
-            }
-        }
     </script>
 </body>
 </html>

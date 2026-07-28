@@ -53,8 +53,40 @@ public class AdminController {
     }
 
     @GetMapping("/games")
-    public String games(Model model) {
-        model.addAttribute("files", fileService.getFileTree());
+    public String games(Model model,
+                        @RequestParam(defaultValue = "1") int page,
+                        @RequestParam(defaultValue = "50") int size,
+                        @RequestParam(required = false) String search) {
+        java.util.List<FileService.FileInfo> allFiles = fileService.getFileTree();
+
+        if (search != null && !search.trim().isEmpty()) {
+            String lowerSearch = search.toLowerCase();
+            allFiles = allFiles.stream()
+                .filter(f -> {
+                    String gameName = f.getUrl().contains("/") ? f.getUrl().substring(f.getUrl().lastIndexOf('/') + 1) : f.getUrl();
+                    return gameName.toLowerCase().contains(lowerSearch) || f.getUrl().toLowerCase().contains(lowerSearch);
+                })
+                .collect(java.util.stream.Collectors.toList());
+        }
+
+        int totalFiles = allFiles.size();
+        int totalPages = (int) Math.ceil((double) totalFiles / size);
+        if (totalPages == 0) totalPages = 1;
+        if (page > totalPages) page = totalPages;
+        if (page < 1) page = 1;
+
+        int start = (page - 1) * size;
+        int end = Math.min(start + size, totalFiles);
+
+        java.util.List<FileService.FileInfo> pagedFiles = allFiles.subList(start, end);
+
+        model.addAttribute("files", pagedFiles);
+        model.addAttribute("currentPage", page);
+        model.addAttribute("totalPages", totalPages);
+        model.addAttribute("totalFiles", totalFiles);
+        model.addAttribute("search", search);
+        model.addAttribute("size", size);
+
         return "admin/games";
     }
 
