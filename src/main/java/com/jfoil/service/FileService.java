@@ -157,6 +157,40 @@ public class FileService {
                 .collect(Collectors.toList());
     }
 
+    public List<FileInfo> getFilesInDirectory(String dirPath) {
+        if (dirPath == null) dirPath = "";
+        if (!dirPath.isEmpty() && !dirPath.endsWith("/")) {
+            dirPath += "/";
+        }
+        String finalDirPath = dirPath;
+
+        return virtualToPhysicalMap.entrySet().stream()
+                .filter(entry -> {
+                    String path = entry.getKey();
+                    if (!path.startsWith(finalDirPath)) return false;
+                    String relative = path.substring(finalDirPath.length());
+                    return !relative.isEmpty() && !relative.contains("/");
+                })
+                .map(entry -> new FileInfo(entry.getKey(), cachedFileTree.getOrDefault(entry.getValue(), 0L)))
+                .collect(Collectors.toList());
+    }
+
+    public List<String> getSubdirectories(String dirPath) {
+        if (dirPath == null) dirPath = "";
+        if (!dirPath.isEmpty() && !dirPath.endsWith("/")) {
+            dirPath += "/";
+        }
+        String finalDirPath = dirPath;
+
+        return virtualToPhysicalMap.keySet().stream()
+                .filter(path -> path.startsWith(finalDirPath))
+                .map(path -> path.substring(finalDirPath.length()))
+                .filter(relative -> relative.contains("/"))
+                .map(relative -> relative.substring(0, relative.indexOf('/')))
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
     public int getFileCount() {
         return cachedFileTree.size();
     }
