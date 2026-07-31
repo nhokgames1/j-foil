@@ -8,6 +8,11 @@ import com.jfoil.repository.SubscriptionRepository;
 import com.jfoil.repository.UserRepository;
 import com.jfoil.service.FileService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.servlet.resource.ResourceHttpRequestHandler;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
@@ -33,12 +38,35 @@ public class TinfoilController {
     private final SubscriptionRepository subscriptionRepository;
     private final DownloadLogRepository downloadLogRepository;
 
+    @Autowired
+    private ApplicationContext applicationContext;
+    private ResourceHttpRequestHandler resourceHandler;
+
     public TinfoilController(FileService fileService, UserRepository userRepository,
             SubscriptionRepository subscriptionRepository, DownloadLogRepository downloadLogRepository) {
         this.fileService = fileService;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.downloadLogRepository = downloadLogRepository;
+    }
+
+    @PostConstruct
+    public void init() {
+        resourceHandler = new ResourceHttpRequestHandler() {
+            @Override
+            protected Resource getResource(HttpServletRequest request) {
+                return (Resource) request.getAttribute("CUSTOM_RESOURCE");
+            }
+        };
+        resourceHandler.setApplicationContext(applicationContext);
+        if (applicationContext instanceof WebApplicationContext) {
+            resourceHandler.setServletContext(((WebApplicationContext) applicationContext).getServletContext());
+        }
+        try {
+            resourceHandler.afterPropertiesSet();
+        } catch (Exception e) {
+            log.error("Failed to initialize ResourceHttpRequestHandler", e);
+        }
     }
 
     private String encodePath(String path) {
@@ -126,7 +154,7 @@ public class TinfoilController {
     public void downloadFile(@PathVariable String filename,
             HttpServletRequest request,
             jakarta.servlet.http.HttpServletResponse response,
-            Authentication authentication) throws IOException {
+            Authentication authentication) throws jakarta.servlet.ServletException, IOException {
 
         // Remove leading slash from filename
         if (filename.startsWith("/")) {
@@ -159,7 +187,7 @@ public class TinfoilController {
             return;
         }
 
-        long contentLength = file.length();
+        Resource resource = new FileSystemResource(file);
         String rangeHeader = request.getHeader(HttpHeaders.RANGE);
 
         // Log download start only for GET requests and only for full file or the first
@@ -169,67 +197,14 @@ public class TinfoilController {
                 DownloadLog logEntry = new DownloadLog();
                 logEntry.setUser(user);
                 logEntry.setFileName(filename);
-                logEntry.setFileSize(contentLength);
+                logEntry.setFileSize(resource.contentLength());
                 logEntry.setIpAddress(request.getRemoteAddr());
                 downloadLogRepository.save(logEntry);
             }
         }
 
-        response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
-        response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
-
-        if (rangeHeader != null && !rangeHeader.isBlank()) {
-            try {
-                java.util.List<org.springframework.http.HttpRange> ranges = org.springframework.http.HttpRange.parseRanges(rangeHeader);
-                if (!ranges.isEmpty()) {
-                    org.springframework.http.HttpRange range = ranges.get(0);
-                    long start = range.getRangeStart(contentLength);
-                    long end = range.getRangeEnd(contentLength);
-                    long rangeLength = end - start + 1;
-
-                    response.setStatus(HttpStatus.PARTIAL_CONTENT.value());
-                    response.setHeader(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + contentLength);
-                    response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(rangeLength));
-
-                    if ("GET".equalsIgnoreCase(request.getMethod())) {
-                        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "r");
-                             java.io.OutputStream os = response.getOutputStream()) {
-                            raf.seek(start);
-                            byte[] buffer = new byte[65536];
-                            long bytesToRead = rangeLength;
-                            int bytesRead;
-                            while (bytesToRead > 0 && (bytesRead = raf.read(buffer, 0, (int) Math.min(buffer.length, bytesToRead))) != -1) {
-                                os.write(buffer, 0, bytesRead);
-                                bytesToRead -= bytesRead;
-                            }
-                            os.flush();
-                        } catch (IOException e) {
-                            // Client disconnected early, perfectly normal
-                        }
-                    }
-                    return;
-                }
-            } catch (IllegalArgumentException e) {
-                response.setStatus(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value());
-                return;
-            }
-        }
-
-        response.setStatus(HttpStatus.OK.value());
-        response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength));
-
-        if ("GET".equalsIgnoreCase(request.getMethod())) {
-            try (java.io.FileInputStream fis = new java.io.FileInputStream(file);
-                 java.io.OutputStream os = response.getOutputStream()) {
-                byte[] buffer = new byte[65536];
-                int bytesRead;
-                while ((bytesRead = fis.read(buffer)) != -1) {
-                    os.write(buffer, 0, bytesRead);
-                }
-                os.flush();
-            } catch (IOException e) {
-                // Client disconnected early
-            }
-        }
+        // Delegate the rest of the HTTP protocol handling entirely to Spring's built-in static file handler
+        request.setAttribute("CUSTOM_RESOURCE", resource);
+        resourceHandler.handleRequest(request, response);
     }
 }
