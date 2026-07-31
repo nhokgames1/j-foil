@@ -178,7 +178,7 @@ public class TinfoilController {
         response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
         response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
 
-        if (rangeHeader != null && !rangeHeader.isBlank() && "GET".equalsIgnoreCase(request.getMethod())) {
+        if (rangeHeader != null && !rangeHeader.isBlank()) {
             try {
                 java.util.List<org.springframework.http.HttpRange> ranges = org.springframework.http.HttpRange.parseRanges(rangeHeader);
                 if (!ranges.isEmpty()) {
@@ -191,17 +191,21 @@ public class TinfoilController {
                     response.setHeader(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + contentLength);
                     response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(rangeLength));
 
-                    try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "r");
-                         java.io.OutputStream os = response.getOutputStream()) {
-                        raf.seek(start);
-                        byte[] buffer = new byte[65536];
-                        long bytesToRead = rangeLength;
-                        int bytesRead;
-                        while (bytesToRead > 0 && (bytesRead = raf.read(buffer, 0, (int) Math.min(buffer.length, bytesToRead))) != -1) {
-                            os.write(buffer, 0, bytesRead);
-                            bytesToRead -= bytesRead;
+                    if ("GET".equalsIgnoreCase(request.getMethod())) {
+                        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "r");
+                             java.io.OutputStream os = response.getOutputStream()) {
+                            raf.seek(start);
+                            byte[] buffer = new byte[65536];
+                            long bytesToRead = rangeLength;
+                            int bytesRead;
+                            while (bytesToRead > 0 && (bytesRead = raf.read(buffer, 0, (int) Math.min(buffer.length, bytesToRead))) != -1) {
+                                os.write(buffer, 0, bytesRead);
+                                bytesToRead -= bytesRead;
+                            }
+                            os.flush();
+                        } catch (IOException e) {
+                            // Client disconnected early, perfectly normal
                         }
-                        os.flush();
                     }
                     return;
                 }
@@ -223,6 +227,8 @@ public class TinfoilController {
                     os.write(buffer, 0, bytesRead);
                 }
                 os.flush();
+            } catch (IOException e) {
+                // Client disconnected early
             }
         }
     }
