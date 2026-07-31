@@ -34,7 +34,7 @@ public class TinfoilController {
     private final DownloadLogRepository downloadLogRepository;
 
     public TinfoilController(FileService fileService, UserRepository userRepository,
-                             SubscriptionRepository subscriptionRepository, DownloadLogRepository downloadLogRepository) {
+            SubscriptionRepository subscriptionRepository, DownloadLogRepository downloadLogRepository) {
         this.fileService = fileService;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
@@ -49,7 +49,7 @@ public class TinfoilController {
         }
     }
 
-    @GetMapping({"", "/", "/index.json"})
+    @GetMapping({ "", "/", "/index.json" })
     public Map<String, Object> getIndex(Authentication authentication) {
         User user = userRepository.findByUsername(authentication.getName()).orElseThrow();
         Subscription sub = subscriptionRepository.findById(user.getId()).orElse(null);
@@ -59,24 +59,27 @@ public class TinfoilController {
 
         if (sub == null || !sub.isActive() || sub.getExpiryDate().isBefore(LocalDateTime.now())) {
             response.put("files", new ArrayList<>());
-            response.put("success", "Goi dang ky da het han hoac chua kich hoat. Vui long lien he facebook.com/vieetvungve hoac Zalo 0357394235 de gia han.");
+            response.put("success",
+                    "Goi dang ky da het han hoac chua kich hoat. Vui long lien he facebook.com/vieetvungve hoac Zalo 0357394235 de gia han.");
             return response;
         }
 
         List<com.jfoil.service.FileService.FileInfo> files = fileService.getFileTree().stream()
-                .map(file -> new com.jfoil.service.FileService.FileInfo("files/" + encodePath(file.getUrl()), file.getSize()))
+                .map(file -> new com.jfoil.service.FileService.FileInfo("files/" + encodePath(file.getUrl()),
+                        file.getSize()))
                 .toList();
         response.put("files", files);
-        response.put("success", "Chao mung " + user.getUsername() + "! Goi dang ky cua ban co hieu luc den ngay " + sub.getExpiryDate().toLocalDate() + ".");
+        response.put("success", "Chao mung " + user.getUsername() + "! Goi dang ky cua ban co hieu luc den ngay "
+                + sub.getExpiryDate().toLocalDate() + ".");
 
         return response;
     }
 
-    @RequestMapping(value = "/files/{*filename}", method = {RequestMethod.GET, RequestMethod.HEAD})
+    @RequestMapping(value = "/files/{*filename}", method = { RequestMethod.GET, RequestMethod.HEAD })
     public ResponseEntity<Resource> downloadFile(@PathVariable String filename,
-                                                 HttpServletRequest request,
-                                                 Authentication authentication) throws IOException {
-        
+            HttpServletRequest request,
+            Authentication authentication) throws IOException {
+
         // Remove leading slash from filename
         if (filename.startsWith("/")) {
             filename = filename.substring(1);
@@ -96,21 +99,24 @@ public class TinfoilController {
         }
 
         Path filePath = fileService.getFilePath(filename);
-        log.info("Download requested for file: '{}' (user: '{}', ip: '{}'). Resolving to path: '{}'", 
+        log.info("Download requested for file: '{}' (user: '{}', ip: '{}'). Resolving to path: '{}'",
                 filename, user.getUsername(), request.getRemoteAddr(), filePath.toAbsolutePath());
         Resource resource = new FileSystemResource(filePath);
 
         if (!resource.exists() || !resource.isReadable()) {
-            log.warn("File not found or not readable: '{}' -> Resolved path: '{}'", filename, filePath.toAbsolutePath());
+            log.warn("File not found or not readable: '{}' -> Resolved path: '{}'", filename,
+                    filePath.toAbsolutePath());
             return ResponseEntity.notFound().build();
         }
 
         long contentLength = resource.contentLength();
 
-        // Log download start only for GET requests and only for full file or the first block/chunk of parallel range downloads
+        // Log download start only for GET requests and only for full file or the first
+        // block/chunk of parallel range downloads
         if ("GET".equalsIgnoreCase(request.getMethod())) {
             String rangeHeader = request.getHeader(HttpHeaders.RANGE);
-            if (rangeHeader == null || rangeHeader.isBlank() || rangeHeader.startsWith("bytes=0-") || rangeHeader.startsWith("bytes=0/")) {
+            if (rangeHeader == null || rangeHeader.isBlank() || rangeHeader.startsWith("bytes=0-")
+                    || rangeHeader.startsWith("bytes=0/")) {
                 DownloadLog logEntry = new DownloadLog();
                 logEntry.setUser(user);
                 logEntry.setFileName(filename);

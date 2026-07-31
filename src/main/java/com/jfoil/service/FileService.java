@@ -114,7 +114,7 @@ public class FileService {
 
     private static boolean isValidSwitchFile(Path path) {
         String name = path.getFileName().toString().toLowerCase();
-        return name.endsWith(".nsp") || name.endsWith(".nsz") || name.endsWith(".xci") || name.endsWith(".xcz");
+        return name.endsWith(".nsp") || name.endsWith(".nsz") || name.endsWith(".xci") || name.endsWith(".xcz") || name.endsWith(".zip") || name.endsWith(".rar");
     }
 
     public synchronized void scanStorageDirectory() {
