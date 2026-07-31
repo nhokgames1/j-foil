@@ -182,10 +182,26 @@ public class TinfoilController {
                         long start = range.getRangeStart(contentLength);
                         long end = range.getRangeEnd(contentLength);
                         long rangeLength = end - start + 1;
-                        org.springframework.core.io.support.ResourceRegion region = new org.springframework.core.io.support.ResourceRegion(resource, start, rangeLength);
+                        
+                        org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody stream = out -> {
+                            try (java.io.InputStream is = resource.getInputStream()) {
+                                long skipped = is.skip(start);
+                                byte[] buffer = new byte[8192];
+                                long bytesToRead = rangeLength;
+                                int bytesRead;
+                                while (bytesToRead > 0 && (bytesRead = is.read(buffer, 0, (int) Math.min(buffer.length, bytesToRead))) != -1) {
+                                    out.write(buffer, 0, bytesRead);
+                                    bytesToRead -= bytesRead;
+                                }
+                            }
+                        };
+                        
                         return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                                .body(region);
+                                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                                .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + contentLength)
+                                .contentLength(rangeLength)
+                                .body(stream);
                     }
                 } catch (IllegalArgumentException e) {
                     return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE).build();
@@ -196,6 +212,7 @@ public class TinfoilController {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .contentLength(contentLength)
                 .body(resource);
     }
 }
