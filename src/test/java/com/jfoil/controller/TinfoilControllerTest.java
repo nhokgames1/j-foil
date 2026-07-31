@@ -168,4 +168,14 @@ public class TinfoilControllerTest {
                 .andExpect(status().isPartialContent())
                 .andExpect(header().string(HttpHeaders.CONTENT_TYPE, org.hamcrest.Matchers.startsWith("multipart/byteranges")));
     }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    public void testDownloadExpiredSubscription() throws Exception {
+        mockSubscription.setExpiryDate(LocalDateTime.now().minusDays(1));
+
+        mockMvc.perform(get("/tinfoil/files/testgame.nsp"))
+                .andExpect(status().isPaymentRequired())
+                .andExpect(header().string("X-Subscription-Error", org.hamcrest.Matchers.containsString("Subscription expired")));
+    }
 }

@@ -142,7 +142,9 @@ public class TinfoilController {
         User user = userRepository.findByUsername(authentication.getName()).orElseThrow();
         Subscription sub = subscriptionRepository.findById(user.getId()).orElse(null);
         if (sub == null || !sub.isActive() || sub.getExpiryDate().isBefore(LocalDateTime.now())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                    .header("X-Subscription-Error", "Subscription expired or inactive. Contact facebook.com/vieetvungve to renew.")
+                    .build();
         }
 
         Path filePath = fileService.getFilePath(filename);
