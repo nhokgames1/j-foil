@@ -123,7 +123,7 @@ public class TinfoilController {
     }
 
     @RequestMapping(value = "/files/{*filename}", method = { RequestMethod.GET, RequestMethod.HEAD })
-    public ResponseEntity<Resource> downloadFile(@PathVariable String filename,
+    public ResponseEntity<?> downloadFile(@PathVariable String filename,
             HttpServletRequest request,
             Authentication authentication) throws IOException {
 
@@ -173,10 +173,29 @@ public class TinfoilController {
                 logEntry.setIpAddress(request.getRemoteAddr());
                 downloadLogRepository.save(logEntry);
             }
+            
+            if (rangeHeader != null && !rangeHeader.isBlank()) {
+                try {
+                    java.util.List<org.springframework.http.HttpRange> ranges = org.springframework.http.HttpRange.parseRanges(rangeHeader);
+                    if (!ranges.isEmpty()) {
+                        org.springframework.http.HttpRange range = ranges.get(0);
+                        long start = range.getRangeStart(contentLength);
+                        long end = range.getRangeEnd(contentLength);
+                        long rangeLength = end - start + 1;
+                        org.springframework.core.io.support.ResourceRegion region = new org.springframework.core.io.support.ResourceRegion(resource, start, rangeLength);
+                        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                                .body(region);
+                    }
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE).build();
+                }
+            }
         }
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .body(resource);
     }
 }
