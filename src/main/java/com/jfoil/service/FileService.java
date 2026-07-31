@@ -112,6 +112,11 @@ public class FileService {
         }
     }
 
+    private static boolean isValidSwitchFile(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".nsp") || name.endsWith(".nsz") || name.endsWith(".xci") || name.endsWith(".xcz");
+    }
+
     public synchronized void scanStorageDirectory() {
         log.info("Scanning storage directory: {}", storagePath);
         Path rootPath = Paths.get(storagePath);
@@ -124,6 +129,7 @@ public class FileService {
         try (Stream<Path> paths = Files.walk(rootPath)) {
             java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger(0);
             paths.filter(Files::isRegularFile)
+                 .filter(FileService::isValidSwitchFile)
                  .forEach(path -> {
                       String relativePath = rootPath.relativize(path).toString().replace("\\", "/");
                       long size = path.toFile().length();
@@ -257,16 +263,18 @@ public class FileService {
                             // Resolve relative path to root path to match cache keys
                             String relativePath = rootPath.relativize(child).toString().replace("\\", "/");
 
-                            if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
+                             if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
                                 try {
                                     if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                                         registerAll(child);
                                         // A new directory was created, scan it to update cache for files inside it
                                         scanStorageDirectory();
                                     } else {
-                                        cachedFileTree.put(relativePath, Files.size(child));
-                                        virtualToPhysicalMap.put(sanitizePath(relativePath), relativePath);
-                                        log.info("File created, added to cache: {}", relativePath);
+                                        if (isValidSwitchFile(child)) {
+                                            cachedFileTree.put(relativePath, Files.size(child));
+                                            virtualToPhysicalMap.put(sanitizePath(relativePath), relativePath);
+                                            log.info("File created, added to cache: {}", relativePath);
+                                        }
                                     }
                                 } catch (IOException e) {
                                     log.error("Error handling ENTRY_CREATE for {}", child, e);
@@ -276,9 +284,11 @@ public class FileService {
                             } else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
                                 try {
                                     if (!Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
-                                        cachedFileTree.put(relativePath, Files.size(child));
-                                        virtualToPhysicalMap.put(sanitizePath(relativePath), relativePath);
-                                        log.info("File modified, updated cache: {}", relativePath);
+                                        if (isValidSwitchFile(child)) {
+                                            cachedFileTree.put(relativePath, Files.size(child));
+                                            virtualToPhysicalMap.put(sanitizePath(relativePath), relativePath);
+                                            log.info("File modified, updated cache: {}", relativePath);
+                                        }
                                     }
                                 } catch (IOException e) {
                                     log.error("Error handling ENTRY_MODIFY for {}", child, e);
