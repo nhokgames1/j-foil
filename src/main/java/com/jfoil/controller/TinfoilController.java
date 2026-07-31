@@ -123,8 +123,9 @@ public class TinfoilController {
     }
 
     @RequestMapping(value = "/files/{*filename}", method = { RequestMethod.GET, RequestMethod.HEAD })
-    public ResponseEntity<?> downloadFile(@PathVariable String filename,
+    public void downloadFile(@PathVariable String filename,
             HttpServletRequest request,
+            jakarta.servlet.http.HttpServletResponse response,
             Authentication authentication) throws IOException {
 
         // Remove leading slash from filename
@@ -142,30 +143,29 @@ public class TinfoilController {
         User user = userRepository.findByUsername(authentication.getName()).orElseThrow();
         Subscription sub = subscriptionRepository.findById(user.getId()).orElse(null);
         if (sub == null || !sub.isActive() || sub.getExpiryDate().isBefore(LocalDateTime.now())) {
-            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
-                    .header("X-Subscription-Error", "Subscription expired or inactive. Contact facebook.com/vieetvungve to renew.")
-                    .build();
+            response.setStatus(HttpStatus.PAYMENT_REQUIRED.value());
+            response.setHeader("X-Subscription-Error", "Subscription expired or inactive. Contact facebook.com/vieetvungve to renew.");
+            return;
         }
 
         Path filePath = fileService.getFilePath(filename);
         log.info("Download requested for file: '{}' (user: '{}', ip: '{}'). Resolving to path: '{}'",
                 filename, user.getUsername(), request.getRemoteAddr(), filePath.toAbsolutePath());
-        Resource resource = new FileSystemResource(filePath);
-
-        if (!resource.exists() || !resource.isReadable()) {
-            log.warn("File not found or not readable: '{}' -> Resolved path: '{}'", filename,
-                    filePath.toAbsolutePath());
-            return ResponseEntity.notFound().build();
+        
+        java.io.File file = filePath.toFile();
+        if (!file.exists() || !file.canRead()) {
+            log.warn("File not found or not readable: '{}' -> Resolved path: '{}'", filename, filePath.toAbsolutePath());
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            return;
         }
 
-        long contentLength = resource.contentLength();
+        long contentLength = file.length();
+        String rangeHeader = request.getHeader(HttpHeaders.RANGE);
 
         // Log download start only for GET requests and only for full file or the first
         // block/chunk of parallel range downloads
         if ("GET".equalsIgnoreCase(request.getMethod())) {
-            String rangeHeader = request.getHeader(HttpHeaders.RANGE);
-            if (rangeHeader == null || rangeHeader.isBlank() || rangeHeader.startsWith("bytes=0-")
-                    || rangeHeader.startsWith("bytes=0/")) {
+            if (rangeHeader == null || rangeHeader.isBlank() || rangeHeader.startsWith("bytes=0-") || rangeHeader.startsWith("bytes=0/")) {
                 DownloadLog logEntry = new DownloadLog();
                 logEntry.setUser(user);
                 logEntry.setFileName(filename);
@@ -173,46 +173,57 @@ public class TinfoilController {
                 logEntry.setIpAddress(request.getRemoteAddr());
                 downloadLogRepository.save(logEntry);
             }
-            
-            if (rangeHeader != null && !rangeHeader.isBlank()) {
-                try {
-                    java.util.List<org.springframework.http.HttpRange> ranges = org.springframework.http.HttpRange.parseRanges(rangeHeader);
-                    if (!ranges.isEmpty()) {
-                        org.springframework.http.HttpRange range = ranges.get(0);
-                        long start = range.getRangeStart(contentLength);
-                        long end = range.getRangeEnd(contentLength);
-                        long rangeLength = end - start + 1;
-                        
-                        org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody stream = out -> {
-                            try (java.io.InputStream is = resource.getInputStream()) {
-                                long skipped = is.skip(start);
-                                byte[] buffer = new byte[8192];
-                                long bytesToRead = rangeLength;
-                                int bytesRead;
-                                while (bytesToRead > 0 && (bytesRead = is.read(buffer, 0, (int) Math.min(buffer.length, bytesToRead))) != -1) {
-                                    out.write(buffer, 0, bytesRead);
-                                    bytesToRead -= bytesRead;
-                                }
-                            }
-                        };
-                        
-                        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                                .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + contentLength)
-                                .contentLength(rangeLength)
-                                .body(stream);
+        }
+
+        response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
+
+        if (rangeHeader != null && !rangeHeader.isBlank() && "GET".equalsIgnoreCase(request.getMethod())) {
+            try {
+                java.util.List<org.springframework.http.HttpRange> ranges = org.springframework.http.HttpRange.parseRanges(rangeHeader);
+                if (!ranges.isEmpty()) {
+                    org.springframework.http.HttpRange range = ranges.get(0);
+                    long start = range.getRangeStart(contentLength);
+                    long end = range.getRangeEnd(contentLength);
+                    long rangeLength = end - start + 1;
+
+                    response.setStatus(HttpStatus.PARTIAL_CONTENT.value());
+                    response.setHeader(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + contentLength);
+                    response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(rangeLength));
+
+                    try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "r");
+                         java.io.OutputStream os = response.getOutputStream()) {
+                        raf.seek(start);
+                        byte[] buffer = new byte[65536];
+                        long bytesToRead = rangeLength;
+                        int bytesRead;
+                        while (bytesToRead > 0 && (bytesRead = raf.read(buffer, 0, (int) Math.min(buffer.length, bytesToRead))) != -1) {
+                            os.write(buffer, 0, bytesRead);
+                            bytesToRead -= bytesRead;
+                        }
+                        os.flush();
                     }
-                } catch (IllegalArgumentException e) {
-                    return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE).build();
+                    return;
                 }
+            } catch (IllegalArgumentException e) {
+                response.setStatus(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value());
+                return;
             }
         }
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .contentLength(contentLength)
-                .body(resource);
+        response.setStatus(HttpStatus.OK.value());
+        response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength));
+
+        if ("GET".equalsIgnoreCase(request.getMethod())) {
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(file);
+                 java.io.OutputStream os = response.getOutputStream()) {
+                byte[] buffer = new byte[65536];
+                int bytesRead;
+                while ((bytesRead = fis.read(buffer)) != -1) {
+                    os.write(buffer, 0, bytesRead);
+                }
+                os.flush();
+            }
+        }
     }
 }
